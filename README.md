@@ -91,7 +91,7 @@ Opus bitrate selection for audiobooks should balance file size with audio qualit
 
 - IETF standard recommended sweet spots: 16–20 kbps for wideband speech, 28–40 kbps for fullband speech ([RFC 7587](https://www.rfc-editor.org/rfc/rfc7587.html))
 - Xiph.org suggests ~24 kbps as where fullband coverage begins for speech, with higher bitrates for consistent fullband clarity ([Opus Recommended Settings](https://wiki.xiph.org/Opus_Recommended_Settings))
-- Additional context from [Hydrogen Audio Wiki](https://wiki.hydrogenaudio.org/index.php?title=Opus)
+- Additional context from [Hydrogen Audio Wiki](https://wiki.hydrogenaudio.org/index.php?title=Opus#Speech_encoding_quality)
 
 ### Objective Quality Measurements
 
