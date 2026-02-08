@@ -57,7 +57,7 @@ class AudiobookConverter:
         ".wma",
         ".opus",
     )
-    
+
     # Cover image patterns: common names and extensions
     COVER_NAMES = ("cover", "folder", "album", "front")
     COVER_EXTENSIONS = (".jpg", ".jpeg", ".png", ".webp")
@@ -82,7 +82,7 @@ class AudiobookConverter:
         self.stereo_strategy = stereo_strategy
         self.copy_images = copy_images
         self.stats = ConversionStats()
-        
+
         # Check for ImageMagick availability once
         self.has_imagemagick = self._check_imagemagick()
 
@@ -168,16 +168,21 @@ class AudiobookConverter:
         try:
             cmd = [
                 "ffprobe",
-                "-v", "error",
-                "-select_streams", "a:0",
-                "-show_entries", "stream=codec_name,bit_rate,channels",
-                "-of", "json",
+                "-v",
+                "error",
+                "-select_streams",
+                "a:0",
+                "-show_entries",
+                "stream=codec_name,bit_rate,channels",
+                "-of",
+                "json",
                 str(input_file),
             ]
             result = subprocess.run(cmd, capture_output=True, text=True, timeout=30)
-            
+
             if result.returncode == 0:
                 import json
+
                 data = json.loads(result.stdout)
                 if "streams" in data and len(data["streams"]) > 0:
                     stream = data["streams"][0]
@@ -189,20 +194,20 @@ class AudiobookConverter:
         except Exception as e:
             if self.verbose:
                 self.logger.debug(f"Error getting audio info for {input_file}: {e}")
-        
+
         return {"codec": "", "bitrate": 0, "channels": 2}
 
     def should_copy_opus(self, input_file: Path) -> bool:
         """Check if Opus file should be copied instead of re-encoded"""
         audio_info = self.get_audio_info(input_file)
-        
+
         if audio_info["codec"] != "opus":
             return False
-        
+
         # Parse target bitrate (remove 'k' and convert to bps)
-        target_bitrate = int(self.bitrate.rstrip('k')) * 1000
+        target_bitrate = int(self.bitrate.rstrip("k")) * 1000
         source_bitrate = audio_info["bitrate"]
-        
+
         # If source bitrate is lower or equal to target, copy instead of re-encode
         return source_bitrate > 0 and source_bitrate <= target_bitrate
 
@@ -223,27 +228,27 @@ class AudiobookConverter:
                 shutil.copy2(input_file, output_file)
                 self.stats.copied_files += 1
                 return True, f"Copied (already optimal): {output_file.name}"
-            
+
             # Get audio info for stereo handling
             audio_info = self.get_audio_info(input_file)
             channels = audio_info["channels"]
             is_stereo = channels > 1
-            
+
             # Determine target bitrate based on stereo strategy
             target_bitrate = self.bitrate
             audio_filter = None
-            
+
             if is_stereo:
                 if self.stereo_strategy == "downmix":
                     audio_filter = "pan=mono|c0=0.5*c0+0.5*c1"
                 elif self.stereo_strategy == "increase-bitrate":
                     # Increase bitrate for stereo by ~60% (1.6x multiplier)
                     # This follows xiph.org recommendations: 24k mono -> ~32k stereo
-                    base_bitrate = int(self.bitrate.rstrip('k'))
+                    base_bitrate = int(self.bitrate.rstrip("k"))
                     stereo_bitrate = int(base_bitrate * 1.6)
                     target_bitrate = f"{stereo_bitrate}k"
                 # For "keep" strategy, do nothing
-            
+
             # Build FFmpeg command
             cmd = [
                 "ffmpeg",
@@ -257,24 +262,26 @@ class AudiobookConverter:
                 "-map_metadata",
                 "0",
             ]
-            
+
             # Add audio filter if needed
             if audio_filter:
                 cmd.extend(["-af", audio_filter])
-            
-            cmd.extend([
-                "-c:a",
-                "libopus",
-                "-b:a",
-                target_bitrate,
-                "-vbr",
-                "on",
-                "-compression_level",
-                "10",
-                "-application",
-                "voip",
-                str(output_file),
-            ])
+
+            cmd.extend(
+                [
+                    "-c:a",
+                    "libopus",
+                    "-b:a",
+                    target_bitrate,
+                    "-vbr",
+                    "on",
+                    "-compression_level",
+                    "10",
+                    "-application",
+                    "voip",
+                    str(output_file),
+                ]
+            )
 
             # Run conversion
             result = subprocess.run(
@@ -289,7 +296,11 @@ class AudiobookConverter:
                 suffix = ""
                 if audio_filter:
                     suffix = " [downmixed to mono]"
-                elif is_stereo and self.stereo_strategy == "increase-bitrate" and target_bitrate != self.bitrate:
+                elif (
+                    is_stereo
+                    and self.stereo_strategy == "increase-bitrate"
+                    and target_bitrate != self.bitrate
+                ):
                     suffix = f" [stereo @ {target_bitrate}]"
                 return True, f"Converted: {output_file.name}{suffix}"
             else:
@@ -314,66 +325,74 @@ class AudiobookConverter:
                 cover_images.extend(self.source_dir.rglob(pattern))
         return sorted(set(cover_images))  # Remove duplicates and sort
 
-    def optimize_image_with_imagemagick(self, input_image: Path, output_image: Path) -> bool:
+    def optimize_image_with_imagemagick(
+        self, input_image: Path, output_image: Path
+    ) -> bool:
         """Optimize image using ImageMagick"""
         try:
             # ImageMagick command to resize and optimize
             cmd = [
                 self.imagemagick_cmd,
                 str(input_image),
-                "-resize", "1200x1200>",  # Resize only if larger, maintain aspect ratio
-                "-quality", "85",
+                "-resize",
+                "1200x1200>",  # Resize only if larger, maintain aspect ratio
+                "-quality",
+                "85",
                 "-strip",  # Remove metadata
                 str(output_image),
             ]
-            
+
             result = subprocess.run(
                 cmd,
                 capture_output=True,
                 text=True,
                 timeout=30,
             )
-            
+
             return result.returncode == 0
-        
+
         except Exception as e:
             if self.verbose:
-                self.logger.debug(f"ImageMagick optimization failed for {input_image.name}: {e}")
+                self.logger.debug(
+                    f"ImageMagick optimization failed for {input_image.name}: {e}"
+                )
             return False
 
     def copy_cover_images(self) -> None:
         """Copy cover images from source to output directory"""
         if not self.copy_images:
             return
-        
+
         cover_images = self.find_cover_images()
-        
+
         for image_file in cover_images:
             try:
                 relative_path = image_file.relative_to(self.source_dir)
                 output_image = self.output_dir / relative_path
-                
+
                 # Skip if already exists
                 if output_image.exists():
                     continue
-                
+
                 # Create output directory
                 output_image.parent.mkdir(parents=True, exist_ok=True)
-                
+
                 # Try to optimize with ImageMagick if available
                 if self.has_imagemagick:
                     if self.optimize_image_with_imagemagick(image_file, output_image):
                         self.stats.copied_images += 1
                         if self.verbose:
-                            self.logger.debug(f"Optimized and copied: {image_file.name}")
+                            self.logger.debug(
+                                f"Optimized and copied: {image_file.name}"
+                            )
                         continue
-                
+
                 # Fallback to simple copy
                 shutil.copy2(image_file, output_image)
                 self.stats.copied_images += 1
                 if self.verbose:
                     self.logger.debug(f"Copied: {image_file.name}")
-            
+
             except Exception as e:
                 if self.verbose:
                     self.logger.error(f"Error copying image {image_file}: {e}")
@@ -481,10 +500,10 @@ class AudiobookConverter:
         self.print_info("=" * 50)
         self.print_info(f"Total files found:        {self.stats.total_files}")
         self.print_success(f"Successfully converted:   {self.stats.converted_files}")
-        
+
         if self.stats.copied_files > 0:
             self.print_success(f"Copied (already optimal): {self.stats.copied_files}")
-        
+
         if self.stats.skipped_files > 0:
             self.print_warning(f"Skipped (already exist):  {self.stats.skipped_files}")
 
@@ -560,8 +579,8 @@ Note: If source file is already Opus with bitrate <= target, it will be
         "-b",
         "--bitrate",
         type=str,
-        default="20k",
-        help="Target bitrate (e.g., 15k, 20k, 24k, 32k) (default: 20k)",
+        default="24k",
+        help="Target bitrate (e.g., 15k, 20k, 24k, 32k) (default: 24k)",
     )
 
     parser.add_argument(

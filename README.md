@@ -20,11 +20,11 @@ A Python tool that efficiently converts audiobooks to the [Opus format](https://
 sudo apt install ffmpeg python3 imagemagick  # Ubuntu/Debian
 # or: brew install ffmpeg python3 imagemagick  # macOS
 
-# Convert audiobooks (uses all CPU cores, 20k bitrate by default)
+# Convert audiobooks (uses all CPU cores, 24k bitrate by default)
 python3 convert_audiobooks.py
 
-# Or use recommended 24k bitrate
-python3 convert_audiobooks.py -b 24k
+# Use lower bitrate for smaller files
+python3 convert_audiobooks.py -b 20k
 ```
 
 Input files: `./original/` → Output files: `./opus/`
@@ -34,7 +34,7 @@ Input files: `./original/` → Output files: `./opus/`
 ### Basic Examples
 
 ```bash
-# Convert with defaults (all CPU cores, 20k bitrate, downmix stereo to mono)
+# Convert with defaults (all CPU cores, 24k bitrate, downmix stereo to mono)
 python3 convert_audiobooks.py
 
 # Custom directories
@@ -44,7 +44,7 @@ python3 convert_audiobooks.py -s ~/Audiobooks -o ~/Audiobooks_Opus
 python3 convert_audiobooks.py -w 4
 
 # High quality
-python3 convert_audiobooks.py -b 24k
+python3 convert_audiobooks.py -b 32k
 
 # Keep stereo files as stereo
 python3 convert_audiobooks.py --stereo keep
@@ -61,7 +61,7 @@ python3 convert_audiobooks.py -v
 ```plain
 -s, --source DIR       Source directory (default: ./original)
 -o, --output DIR       Output directory (default: ./opus)
--b, --bitrate RATE     Bitrate: 15k, 20k, 24k, 32k, 40k, 48k, etc. (default: 20k)
+-b, --bitrate RATE     Bitrate: 15k, 20k, 24k, 32k, 40k, 48k, etc. (default: 24k)
 -w, --workers NUM      Parallel workers (default: CPU count)
 --stereo STRATEGY      Stereo handling: downmix, keep, increase-bitrate (default: downmix)
 --no-images            Skip copying cover images
@@ -73,25 +73,70 @@ python3 convert_audiobooks.py -v
 
 ## Quality Settings
 
-Choosing the right bitrate depends on your source recording quality and personal preferences:
+Opus bitrate selection for audiobooks should balance file size with audio quality. The following recommendations are based on the Opus specification ([RFC 7587](https://www.rfc-editor.org/rfc/rfc7587.html)), codec developer guidance ([Xiph.org](https://wiki.xiph.org/Opus_Recommended_Settings)), and empirical testing.
 
-| Bitrate | Quality | Characteristics | Best For |
-| ------- | ------- | --------------- | -------- |
-| 15k | Good | Narrower frequency range, some artifacts in sibilants (S/SH sounds) | Lower quality recordings, maximum compression |
-| 20k | Very Good | Improved clarity, still some muddiness in sibilants | General use, balanced quality/size |
-| **24k** | **Excellent** | Natural sibilants, recommended by Opus developers | **Most audiobooks** |
-| 32k | High | Better transparency and frequency response | High-quality recordings |
-| 40k+ | Very High | Fuller sound, closer to source | Studio-quality recordings |
+### Bitrate Reference Table
 
-**Recommendations:**
+| Bitrate (mono) | Audio Bandwidth | Quality Characteristics | Recommended Use |
+| -------------- | --------------- | ----------------------- | --------------- |
+| **12–16 kbps** | Mediumband → Wideband (~8 kHz) | Narrower frequency range, reduced clarity in high frequencies | Maximum compression, low-quality source recordings |
+| **16–20 kbps** | Wideband (~8 kHz) | Good speech intelligibility, some bandwidth limitations | Balanced quality/size for basic audiobooks |
+| **20–24 kbps** | Wideband / beginning Super-wideband | Improved clarity, approaching wider frequency response | General purpose audiobooks |
+| **24–28 kbps** | Super-wideband (~12 kHz) | Natural speech quality, better high-frequency response | Recommended minimum for quality audiobooks |
+| **28–32 kbps** | Fullband (0–20 kHz) | Full audio bandwidth, excellent clarity | High-quality recordings |
+| **32–40 kbps** | Fullband (0–20 kHz) | Strong fullband quality with headroom | Professional audiobooks, complex audio |
+| **40–64 kbps** | Fullband (0–20 kHz) | Very high fidelity, transparent quality | Studio recordings, audiobooks with music/effects |
 
-- **24k** is the sweet spot for most audiobooks (recommended by [xiph.org](https://wiki.xiph.org/Opus_Recommended_Settings) for mono speech)
-- **15k** works surprisingly well for lower-quality source recordings
-- **32k+** is worthwhile for high-quality studio recordings where you can hear the difference
-- For stereo files with `--stereo increase-bitrate`, the script automatically uses 60% higher bitrates (e.g., 20k → 32k)
-- You can use any bitrate value (e.g., 19k, 21k, 26k) - Opus VBR is flexible
+**Sources:**
 
-**Note:** Opus excels at low bitrates, but no bitrate perfectly preserves the full bandwidth and clarity of high-quality source recordings. Test different bitrates with your specific audiobooks to find the best balance for your needs.
+- IETF standard recommended sweet spots: 16–20 kbps for wideband speech, 28–40 kbps for fullband speech ([RFC 7587](https://www.rfc-editor.org/rfc/rfc7587.html))
+- Xiph.org suggests ~24 kbps as where fullband coverage begins for speech, with higher bitrates for consistent fullband clarity ([Opus Recommended Settings](https://wiki.xiph.org/Opus_Recommended_Settings))
+- Additional context from [Hydrogen Audio Wiki](https://wiki.hydrogenaudio.org/index.php?title=Opus)
+
+### Objective Quality Measurements
+
+MUSHRA-type listening tests ([Google 2011](https://www.opus-codec.org/static/comparison/GoogleTest1.pdf)) on speech samples show:
+
+- **32 kbps**: 97.2 / 100 (near-transparent quality)
+- **20 kbps**: 77.9 / 100 (good quality with noticeable differences)
+- **Original**: 99.3 / 100
+
+These results indicate that 32 kbps achieves near-transparent quality for most speech, while 20 kbps provides good but not transparent quality.
+
+### Practical Recommendations
+
+**For most audiobooks:**
+
+- **24–32 kbps** — Recommended range balancing quality and file size
+  - 24 kbps: Default setting; Xiph.org recommended minimum for fullband mono speech
+  - 32 kbps: Near-transparent quality based on listening tests
+
+**For maximum compression:**
+
+- **16–20 kbps** — Acceptable quality with significant size savings
+  - 20 kbps: Good quality (77.9/100 in tests), smaller file sizes
+  - 16 kbps: Wideband coverage, suitable for basic recordings
+
+**For high-quality/archival:**
+
+- **40–64 kbps** — Very high fidelity, minimal quality loss
+  - Useful for studio recordings or content with music/sound effects
+
+**Additional notes:**
+
+- Opus uses **Variable Bitrate (VBR)** by default, adapting to audio complexity for better efficiency
+- For stereo files with `--stereo increase-bitrate`, bitrates automatically increase by 60% (e.g., 24k → 38k)
+- Any bitrate value can be specified (e.g., 19k, 26k, 35k) — Opus VBR is flexible
+- Bandwidth transitions depend on encoder version and content; newer libopus versions may achieve fullband at slightly lower bitrates
+
+### Why Bitrate Recommendations Vary
+
+You may encounter different bitrate-to-bandwidth mappings across sources due to:
+
+- **Standards vs. empirical guidance**: IETF specifications define ideal sweet spots, while community resources (Xiph.org, Hydrogen Audio) reflect actual encoder behavior and listening experience
+- **Encoder evolution**: Newer libopus versions can achieve better quality at lower bitrates than older versions
+- **Content dependency**: Encoder decisions vary based on audio complexity, frame size, and input characteristics
+- **Subjective vs. objective definitions**: "Fullband quality" may refer to technical bandwidth (0–20 kHz) or subjective listener perception
 
 ## Stereo Handling
 
@@ -107,7 +152,7 @@ python3 convert_audiobooks.py --stereo downmix
 
 ### keep
 
-Keeps stereo files as-is. At lower bitrates (e.g., 20k), Opus may partially downmix stereo anyway.
+Keeps stereo files as-is. At lower bitrates (e.g., 24k or below), Opus may partially downmix stereo anyway.
 
 ```bash
 python3 convert_audiobooks.py --stereo keep
@@ -116,9 +161,10 @@ python3 convert_audiobooks.py --stereo keep
 ### increase-bitrate
 
 Automatically increases bitrate for stereo files by 60% to preserve stereo imaging. Examples:
+
 - 15k → 24k
 - 20k → 32k
-- 24k → 38k
+- 24k → 38k (default)
 - 32k → 51k
 - 40k → 64k
 
@@ -130,7 +176,7 @@ python3 convert_audiobooks.py --stereo increase-bitrate
 
 **Codec Settings:**
 
-- Opus at 20 kbps VBR (Variable Bitrate) by default
+- Opus at 24 kbps VBR (Variable Bitrate) by default
 - VOIP mode (optimized for speech)
 - Compression level 10 (maximum quality)
 - Preserves all metadata and cover art
@@ -197,10 +243,12 @@ audiobook-opus-converter/
 ## Requirements
 
 **Required:**
+
 - Python 3.7 or later
 - FFmpeg with libopus support
 
 **Optional:**
+
 - ImageMagick (for cover image optimization, usually pre-installed on Linux)
 
 ```bash
